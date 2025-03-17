@@ -217,6 +217,12 @@
             }
         }
 
+        // Event listener for touch to capture image
+        video.addEventListener('click', () => {
+            const imageUrl = captureImage();
+            logDetection("Captured Image", 1, imageUrl);  // Log as a captured image
+        });
+
         async function start() {
             await loadModel();
         }
