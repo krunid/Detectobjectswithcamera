@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=430, initial-scale=1.0">
-    <title>Object Detection with Log</title>
+    <title>Object Detection with Switch Camera</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <style>
@@ -16,134 +16,89 @@
             padding-bottom: 100px;
         }
         h1 { font-size: 22px; margin: 20px 0; }
-        video, canvas { width: 100%; border-radius: 20px; }
+        .video-container { position: relative; width: 100%; max-width: 430px; }
+        video, canvas { width: 100%; border-radius: 20px; position: absolute; }
+        #canvas { top: 0; left: 0; z-index: 10; }
         #result { font-size: 18px; margin: 10px 0; font-weight: bold; }
-        
+        button { padding: 10px 20px; margin: 10px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        .btn-switch { background-color: #007AFF; color: white; }
         table { width: 100%; margin-top: 10px; border-collapse: collapse; background: white; border-radius: 10px; }
         th, td { padding: 8px; text-align: center; border-bottom: 1px solid #ddd; }
         th { background-color: #007AFF; color: white; }
-        
-        .thumbnail { width: 50px; height: 50px; object-fit: cover; border-radius: 5px; cursor: pointer; }
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); }
-        .modal img { display: block; max-width: 90%; margin: auto; margin-top: 10%; border-radius: 10px; }
-        .modal-close { position: absolute; top: 10px; right: 20px; color: white; font-size: 30px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h1>Object Detection (iPhone Style)</h1>
-    <video id="video" autoplay playsinline></video>
-    <canvas id="canvas" style="display:none;"></canvas>
-    <p id="result">Detecting...</p>
+    <h1>Object Detection</h1>
+    
+    <button class="btn-switch" onclick="switchCamera()">🔄 เปลี่ยนกล้อง</button>
 
-    <h2>Detection Log</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>#</th>
-                <th>Image</th>
-                <th>Object</th>
-                <th>Confidence</th>
-                <th>Time</th>
-            </tr>
-        </thead>
-        <tbody id="logTable"></tbody>
-    </table>
-
-    <div id="modal" class="modal">
-        <span class="modal-close">&times;</span>
-        <img id="modalImg">
+    <div class="video-container">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
     </div>
+
+    <p id="result">Initializing...</p>
 
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const resultText = document.getElementById('result');
-        const logTable = document.getElementById('logTable');
-        const modal = document.getElementById('modal');
-        const modalImg = document.getElementById('modalImg');
-        const closeModal = document.querySelector(".modal-close");
-        let detectionCount = 0;
+        let model = null;
+        let currentStream = null;
+        let useFrontCamera = true;
 
         async function setupCamera() {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 430, height: 932 }
-            });
-            video.srcObject = stream;
-            return new Promise((resolve) => {
-                video.onloadedmetadata = () => resolve(video);
-            });
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            const constraints = {
+                video: { 
+                    facingMode: useFrontCamera ? "user" : "environment",
+                    width: 430, height: 932
+                }
+            };
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
         }
 
-        function logDetection(object, confidence, imageUrl) {
-            detectionCount++;
-            const time = new Date().toLocaleTimeString();
-            const newRow = `
-                <tr>
-                    <td>${detectionCount}</td>
-                    <td><img src="${imageUrl}" class="thumbnail" onclick="openImage('${imageUrl}')"></td>
-                    <td>${object}</td>
-                    <td>${(confidence * 100).toFixed(2)}%</td>
-                    <td>${time}</td>
-                </tr>`;
-            logTable.innerHTML = newRow + logTable.innerHTML; // แสดงรายการล่าสุดด้านบน
+        function switchCamera() {
+            useFrontCamera = !useFrontCamera;
+            setupCamera();
         }
 
-        function captureImage() {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            return canvas.toDataURL("image/png");
+        async function loadModel() {
+            model = await cocoSsd.load();
+            console.log("Model Loaded!");
         }
 
         async function detectObjects() {
-            const model = await cocoSsd.load();
-            console.log("Model Loaded!");
+            if (!video.srcObject) return;
+            const predictions = await model.detect(video);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            setInterval(async () => {
-                const predictions = await model.detect(video);
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                if (predictions.length === 0) {
-                    resultText.innerText = "No objects detected.";
-                }
-
-                predictions.forEach(prediction => {
-                    ctx.beginPath();
-                    ctx.rect(...prediction.bbox);
-                    ctx.lineWidth = 2;
-                    ctx.strokeStyle = "red";
-                    ctx.fillStyle = "red";
-                    ctx.stroke();
-                    ctx.fillText(prediction.class, prediction.bbox[0], prediction.bbox[1] > 10 ? prediction.bbox[1] - 5 : 10);
-
-                    resultText.innerText = `Detected: ${prediction.class} (${Math.round(prediction.score * 100)}%)`;
-
-                    const imageUrl = captureImage();
-                    logDetection(prediction.class, prediction.score, imageUrl);
-                });
-            }, 2000);
-        }
-
-        function openImage(imageUrl) {
-            modal.style.display = "block";
-            modalImg.src = imageUrl;
-        }
-
-        closeModal.onclick = function() {
-            modal.style.display = "none";
-        };
-
-        window.onclick = function(event) {
-            if (event.target == modal) {
-                modal.style.display = "none";
+            if (predictions.length === 0) {
+                resultText.innerText = "No objects detected.";
             }
-        };
+
+            predictions.forEach(prediction => {
+                ctx.beginPath();
+                ctx.rect(...prediction.bbox);
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = "red";
+                ctx.fillStyle = "red";
+                ctx.stroke();
+                ctx.fillText(`${prediction.class} (${Math.round(prediction.score * 100)}%)`, prediction.bbox[0], prediction.bbox[1] - 10);
+
+                resultText.innerText = `Detected: ${prediction.class} (${Math.round(prediction.score * 100)}%)`;
+            });
+        }
 
         async function start() {
             await setupCamera();
-            detectObjects();
+            await loadModel();
+            setInterval(detectObjects, 5000);
         }
 
         start();
