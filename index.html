@@ -76,31 +76,6 @@
             color: white;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
-        table {
-            width: 100%;
-            margin-top: 20px;
-            border-collapse: collapse;
-            background: white;
-            border-radius: 20px;
-            margin-bottom: 30px;
-        }
-        th, td {
-            padding: 12px;
-            text-align: center;
-            border-bottom: 1px solid #ddd;
-            font-size: 14px;
-        }
-        th {
-            background-color: #FFC0CB;
-            color: white;
-        }
-        .thumbnail {
-            width: 50px;
-            height: 50px;
-            object-fit: cover;
-            border-radius: 5px;
-            cursor: pointer;
-        }
         footer {
             position: absolute;
             bottom: 0;
@@ -150,31 +125,6 @@
             height: 30px;
             cursor: pointer;
         }
-
-        /* Media queries for responsive images */
-        @media (max-width: 768px) {
-            .container {
-                width: 100%;
-                height: auto;
-                padding: 10px;
-            }
-            .video-container {
-                width: 100%;
-                height: 60%;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .container {
-                width: 100%;
-                height: auto;
-                padding: 10px;
-            }
-            .video-container {
-                width: 100%;
-                height: 50%;
-            }
-        }
     </style>
 </head>
 <body>
@@ -188,26 +138,10 @@
             <canvas id="canvas"></canvas>
         </div>
 
-        <div class="log-container">
-            <h2>Detection Log</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Image</th>
-                        <th>Object</th>
-                        <th>Confidence</th>
-                        <th>Time</th>
-                    </tr>
-                </thead>
-                <tbody id="logTable"></tbody>
-            </table>
-        </div>
+        <footer>
+            <p>พัฒนาโดย <a href="https://krunidblogger.blogspot.com/" target="_blank">ครูนิด ศิษย์หลวงพ่อเสือ</a> | สงวนลิขสิทธิ์ มีนาคม 2568</p>
+        </footer>
     </div>
-
-    <footer>
-        <p>พัฒนาโดย <a href="https://krunidblogger.blogspot.com/" target="_blank">ครูนิด ศิษย์หลวงพ่อเสือ</a> | สงวนลิขสิทธิ์ มีนาคม 2568</p>
-    </footer>
 
     <!-- Popup for large image -->
     <div id="popup" class="popup-overlay">
@@ -222,18 +156,16 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const resultText = document.getElementById('result');
-        const logTable = document.getElementById('logTable');
         const popup = document.getElementById('popup');
         const popupImage = document.getElementById('popupImage');
         let model = null;
         let currentStream = null;
         let useFrontCamera = true;
-        let detectionCount = 0;
         let cameraActive = false;
 
         async function setupCamera() {
             if (currentStream) {
-                currentStream.getTracks().forEach(track => track.stop());
+                currentStream.getTracks().forEach(track => track.stop()); // Close previous stream if exists
             }
             const constraints = {
                 video: { 
@@ -247,7 +179,9 @@
 
         function switchCamera() {
             useFrontCamera = !useFrontCamera;
-            if (cameraActive) setupCamera();  // Only switch if camera is active
+            if (cameraActive) {
+                setupCamera();  // Switch camera if active
+            }
         }
 
         async function loadModel() {
@@ -260,20 +194,6 @@
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             return canvas.toDataURL("image/png");
-        }
-
-        function logDetection(object, confidence, imageUrl) {
-            detectionCount++;
-            const time = new Date().toLocaleTimeString();
-            const newRow = `
-                <tr>
-                    <td>${detectionCount}</td>
-                    <td><img src="${imageUrl}" class="thumbnail" onclick="openPopup('${imageUrl}')"></td>
-                    <td>${object}</td>
-                    <td>${(confidence * 100).toFixed(2)}%</td>
-                    <td>${time}</td>
-                </tr>`;
-            logTable.innerHTML = newRow + logTable.innerHTML;
         }
 
         async function detectObjects() {
@@ -294,33 +214,27 @@
                 ctx.fillStyle = "red";
                 ctx.stroke();
                 ctx.fillText(`${prediction.class} (${Math.round(prediction.score * 100)}%)`, prediction.bbox[0], prediction.bbox[1] - 10);
-
-                resultText.innerText = `Detected: ${prediction.class} (${Math.round(prediction.score * 100)}%)`;
-
-                const imageUrl = captureImage();
-                logDetection(prediction.class, prediction.score, imageUrl);
             });
         }
 
         function toggleCamera() {
             if (cameraActive) {
                 const tracks = video.srcObject.getTracks();
-                tracks.forEach(track => track.stop());
-                video.srcObject = null;
+                tracks.forEach(track => track.stop());  // Stop the current video stream
+                video.srcObject = null;  // Reset video source
                 cameraActive = false;
                 resultText.innerText = "Camera is off.";
             } else {
-                setupCamera();
+                setupCamera();  // Start camera
                 cameraActive = true;
                 resultText.innerText = "Camera is on.";
-                setInterval(detectObjects, 5000);
+                setInterval(detectObjects, 5000);  // Detect objects every 5 seconds
             }
         }
 
         // Event listener for touch to capture image
         video.addEventListener('click', () => {
             const imageUrl = captureImage();
-            logDetection("Captured Image", 1, imageUrl);  // Log as a captured image
             setTimeout(() => {
                 resultText.innerText = '';  // Hide the result after 3 seconds
             }, 3000);
