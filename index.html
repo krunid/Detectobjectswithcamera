@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=430, initial-scale=1.0">
-    <title>Object Detection with Switch Camera</title>
+    <title>Object Detection with Table Output</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <style>
@@ -25,6 +25,7 @@
         table { width: 100%; margin-top: 10px; border-collapse: collapse; background: white; border-radius: 10px; }
         th, td { padding: 8px; text-align: center; border-bottom: 1px solid #ddd; }
         th { background-color: #007AFF; color: white; }
+        .thumbnail { width: 50px; height: 50px; object-fit: cover; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -39,14 +40,30 @@
 
     <p id="result">Initializing...</p>
 
+    <h2>Detection Log</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Image</th>
+                <th>Object</th>
+                <th>Confidence</th>
+                <th>Time</th>
+            </tr>
+        </thead>
+        <tbody id="logTable"></tbody>
+    </table>
+
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const resultText = document.getElementById('result');
+        const logTable = document.getElementById('logTable');
         let model = null;
         let currentStream = null;
         let useFrontCamera = true;
+        let detectionCount = 0;
 
         async function setupCamera() {
             if (currentStream) {
@@ -72,6 +89,27 @@
             console.log("Model Loaded!");
         }
 
+        function captureImage() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL("image/png");
+        }
+
+        function logDetection(object, confidence, imageUrl) {
+            detectionCount++;
+            const time = new Date().toLocaleTimeString();
+            const newRow = `
+                <tr>
+                    <td>${detectionCount}</td>
+                    <td><img src="${imageUrl}" class="thumbnail"></td>
+                    <td>${object}</td>
+                    <td>${(confidence * 100).toFixed(2)}%</td>
+                    <td>${time}</td>
+                </tr>`;
+            logTable.innerHTML = newRow + logTable.innerHTML;
+        }
+
         async function detectObjects() {
             if (!video.srcObject) return;
             const predictions = await model.detect(video);
@@ -92,6 +130,9 @@
                 ctx.fillText(`${prediction.class} (${Math.round(prediction.score * 100)}%)`, prediction.bbox[0], prediction.bbox[1] - 10);
 
                 resultText.innerText = `Detected: ${prediction.class} (${Math.round(prediction.score * 100)}%)`;
+
+                const imageUrl = captureImage();
+                logDetection(prediction.class, prediction.score, imageUrl);
             });
         }
 
