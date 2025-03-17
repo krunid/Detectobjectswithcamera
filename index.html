@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=430, initial-scale=1.0">
-    <title>Object Detection with Table Output</title>
+    <title>Object Detection with Camera Control</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <style>
@@ -11,48 +11,113 @@
             font-family: Arial, sans-serif; 
             background-color: #f8f9fa; 
             text-align: center; 
-            max-width: 430px;
-            margin: auto;
-            padding-bottom: 100px;
+            margin: 0;
+            padding: 0;
         }
-        h1 { font-size: 22px; margin: 20px 0; }
-        .video-container { position: relative; width: 100%; max-width: 430px; }
-        video, canvas { width: 100%; border-radius: 20px; position: absolute; }
+        .container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 20px;
+        }
+        h1 { font-size: 22px; margin: 10px 0; }
+        .video-container { 
+            position: relative; 
+            width: 100%;
+            max-width: 430px;
+            height: auto;
+        }
+        video, canvas { 
+            width: 100%; 
+            max-width: 430px;
+            border-radius: 20px;
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+        }
         #canvas { top: 0; left: 0; z-index: 10; }
         #result { font-size: 18px; margin: 10px 0; font-weight: bold; }
-        button { padding: 10px 20px; margin: 10px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        button { 
+            padding: 10px 20px; 
+            margin: 10px; 
+            border: none; 
+            border-radius: 5px; 
+            font-size: 16px; 
+            cursor: pointer; 
+        }
         .btn-switch { background-color: #007AFF; color: white; }
-        table { width: 100%; margin-top: 10px; border-collapse: collapse; background: white; border-radius: 10px; }
-        th, td { padding: 8px; text-align: center; border-bottom: 1px solid #ddd; }
+        .btn-toggle { background-color: #FF3B30; color: white; }
+        table { 
+            width: 100%; 
+            margin-top: 20px; 
+            border-collapse: collapse; 
+            background: white; 
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        th, td { 
+            padding: 8px; 
+            text-align: center; 
+            border-bottom: 1px solid #ddd; 
+        }
         th { background-color: #007AFF; color: white; }
-        .thumbnail { width: 50px; height: 50px; object-fit: cover; border-radius: 5px; cursor: pointer; }
+        .thumbnail { 
+            width: 50px; 
+            height: 50px; 
+            object-fit: cover; 
+            border-radius: 5px; 
+            cursor: pointer;
+        }
+        .log-container { margin-top: 100px; }
+
+        footer {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background-color: #007AFF;
+            color: white;
+            padding: 10px 0;
+            text-align: center;
+            font-size: 14px;
+        }
+        footer a {
+            color: #ffd700;
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
-    <h1>Object Detection</h1>
-    
-    <button class="btn-switch" onclick="switchCamera()">🔄 เปลี่ยนกล้อง</button>
+    <div class="container">
+        <h1>Object Detection</h1>
+        <button class="btn-switch" onclick="switchCamera()">🔄 เปลี่ยนกล้อง</button>
+        <button class="btn-toggle" onclick="toggleCamera()">🔴 เปิด/ปิดกล้อง</button>
 
-    <div class="video-container">
-        <video id="video" autoplay playsinline></video>
-        <canvas id="canvas"></canvas>
+        <div class="video-container">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div class="log-container">
+            <h2>Detection Log</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Image</th>
+                        <th>Object</th>
+                        <th>Confidence</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody id="logTable"></tbody>
+            </table>
+        </div>
     </div>
 
-    <p id="result">Initializing...</p>
-
-    <h2>Detection Log</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>#</th>
-                <th>Image</th>
-                <th>Object</th>
-                <th>Confidence</th>
-                <th>Time</th>
-            </tr>
-        </thead>
-        <tbody id="logTable"></tbody>
-    </table>
+    <footer>
+        <p>พัฒนาโดย <a href="https://krunidblogger.blogspot.com/" target="_blank">ครูนิด ศิษย์หลวงพ่อเสือ</a> | สงวนลิขสิทธิ์ มีนาคม 2568</p>
+    </footer>
 
     <script>
         const video = document.getElementById('video');
@@ -64,6 +129,7 @@
         let currentStream = null;
         let useFrontCamera = true;
         let detectionCount = 0;
+        let cameraActive = false;
 
         async function setupCamera() {
             if (currentStream) {
@@ -81,7 +147,7 @@
 
         function switchCamera() {
             useFrontCamera = !useFrontCamera;
-            setupCamera();
+            if (cameraActive) setupCamera();  // Only switch if camera is active
         }
 
         async function loadModel() {
@@ -136,10 +202,23 @@
             });
         }
 
+        function toggleCamera() {
+            if (cameraActive) {
+                const tracks = video.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+                video.srcObject = null;
+                cameraActive = false;
+                resultText.innerText = "Camera is off.";
+            } else {
+                setupCamera();
+                cameraActive = true;
+                resultText.innerText = "Camera is on.";
+                setInterval(detectObjects, 5000);
+            }
+        }
+
         async function start() {
-            await setupCamera();
             await loadModel();
-            setInterval(detectObjects, 5000);
         }
 
         start();
