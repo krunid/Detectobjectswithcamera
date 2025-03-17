@@ -125,6 +125,27 @@
             height: 30px;
             cursor: pointer;
         }
+
+        /* Table styling */
+        table {
+            width: 100%;
+            margin-top: 10px;
+            border-collapse: collapse;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #FFC0CB;
+        }
+        td img {
+            width: 100px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -137,6 +158,20 @@
             <video id="video" autoplay playsinline></video>
             <canvas id="canvas"></canvas>
         </div>
+
+        <p id="result"></p>
+
+        <!-- Display the captured images in a table -->
+        <table id="imageTable">
+            <thead>
+                <tr>
+                    <th>Image</th>
+                    <th>Object</th>
+                    <th>Confidence</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
 
         <footer>
             <p>พัฒนาโดย <a href="https://krunidblogger.blogspot.com/" target="_blank">ครูนิด ศิษย์หลวงพ่อเสือ</a> | สงวนลิขสิทธิ์ มีนาคม 2568</p>
@@ -158,6 +193,7 @@
         const resultText = document.getElementById('result');
         const popup = document.getElementById('popup');
         const popupImage = document.getElementById('popupImage');
+        const imageTable = document.getElementById('imageTable').getElementsByTagName('tbody')[0];
         let model = null;
         let currentStream = null;
         let useFrontCamera = true;
@@ -214,6 +250,21 @@
                 ctx.fillStyle = "red";
                 ctx.stroke();
                 ctx.fillText(`${prediction.class} (${Math.round(prediction.score * 100)}%)`, prediction.bbox[0], prediction.bbox[1] - 10);
+            });
+
+            // Save image and object data to table
+            predictions.forEach(prediction => {
+                const imgData = captureImage();
+                const row = imageTable.insertRow();
+                const cell1 = row.insertCell(0);
+                const cell2 = row.insertCell(1);
+                const cell3 = row.insertCell(2);
+                const img = document.createElement('img');
+                img.src = imgData;
+                img.onclick = function() { openPopup(imgData); };
+                cell1.appendChild(img);
+                cell2.textContent = prediction.class;
+                cell3.textContent = `${Math.round(prediction.score * 100)}%`;
             });
         }
 
